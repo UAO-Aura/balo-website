@@ -2695,3 +2695,205 @@ function balo_uwezo_privacy_policy_shortcode($atts) {
     return ob_get_clean();
 }
 add_shortcode('uwezo_privacy_policy', 'balo_uwezo_privacy_policy_shortcode');
+
+/* ============================================================
+ * MARKETPLACE DEMO LISTINGS  (admin-only, idempotent, reversible)
+ *
+ * While real members are registering but not yet posting, these
+ * clearly-labelled EXAMPLE listings show newcomers what a good listing
+ * looks like and keep the marketplace from reading as empty. They are
+ * written into the SAME per-user meta the marketplace renders
+ * (skillswitches / service_listings / mentorship_listings), under demo
+ * users flagged 'balo_is_demo', so they appear exactly where real
+ * listings do — and can be removed in one click.
+ *
+ * Seed / remove from the admin notice (admins only), or directly:
+ *   /wp-admin/admin-post.php?action=balo_seed_demos    (nonce-protected)
+ *   /wp-admin/admin-post.php?action=balo_remove_demos  (nonce-protected)
+ * ============================================================ */
+
+if (!function_exists('balo_demo_personas')) {
+    function balo_demo_personas() {
+        return [
+            // ---- SkillSwitch (meta: skillswitches) ----
+            ['kind' => 'skillswitch', 'name' => 'Amara Okafor', 'country' => 'Lagos, Nigeria', 'row' => [
+                'offer'   => 'Hair braiding & natural hair care (example)',
+                'want'    => 'Help building a simple website',
+                'details' => 'Example listing — Amara from Lagos. I braid cornrows and protective styles, and I would love help getting my first website online.',
+            ]],
+            ['kind' => 'skillswitch', 'name' => 'Mateo Fernandez', 'country' => 'Buenos Aires, Argentina', 'row' => [
+                'offer'   => 'Spanish conversation lessons (example)',
+                'want'    => 'Guitar basics for a beginner',
+                'details' => 'Example listing — Mateo from Buenos Aires. Native Spanish, patient and relaxed. Happy to swap for a few beginner guitar sessions.',
+            ]],
+            ['kind' => 'skillswitch', 'name' => 'Priya Sharma', 'country' => 'Mumbai, India', 'row' => [
+                'offer'   => 'Home-style Indian cooking (example)',
+                'want'    => 'Gentle beginner yoga sessions',
+                'details' => 'Example listing — Priya from Mumbai. I teach everyday Indian dishes from scratch; looking to trade for calm beginner yoga.',
+            ]],
+
+            // ---- Service listings (meta: service_listings) ----
+            ['kind' => 'service', 'name' => 'Fatima Benali', 'country' => 'Marrakech, Morocco', 'row' => [
+                'business_name'       => 'Fatima\'s Henna Art (example)',
+                'service_description' => 'Bridal and event henna with natural cones. Delicate, long-lasting designs.',
+                'service_category'    => 'Beauty & Wellness',
+                'service_areas'       => 'Marrakech & nearby',
+                'service_duration'    => '1-2 hours',
+                'price_raw'           => 25.0,
+            ]],
+            ['kind' => 'service', 'name' => 'Diego Costa', 'country' => 'Lisbon, Portugal', 'row' => [
+                'business_name'       => 'Diego\'s Bike Repair (example)',
+                'service_description' => 'Tune-ups, punctures, brakes and gears — often same day.',
+                'service_category'    => 'Repairs',
+                'service_areas'       => 'Lisbon',
+                'service_duration'    => '30-60 min',
+                'price_raw'           => 18.0,
+            ]],
+            ['kind' => 'service', 'name' => 'Sofia Njoroge', 'country' => 'Nairobi, Kenya', 'row' => [
+                'business_name'       => 'Sofia\'s Home Cleaning (example)',
+                'service_description' => 'Reliable, thorough home cleaning using eco-friendly products.',
+                'service_category'    => 'Home Services',
+                'service_areas'       => 'Nairobi',
+                'service_duration'    => '2-3 hours',
+                'price_raw'           => 15.0,
+            ]],
+
+            // ---- Mentorship / memberships (meta: mentorship_listings) ----
+            ['kind' => 'mentorship', 'name' => 'Ingrid Larsson', 'country' => 'Stockholm, Sweden', 'row' => [
+                'title'              => 'Grow your first startup (example)',
+                'philosophy'         => 'Small steps, real customers, no fluff.',
+                'areas_of_expertise' => 'Entrepreneurship, early fundraising',
+                'course_duration'    => '6 weeks',
+                'price_raw'          => 30.0,
+            ]],
+            ['kind' => 'mentorship', 'name' => 'Rajesh Kumar', 'country' => 'Bangalore, India', 'row' => [
+                'title'              => 'Break into software engineering (example)',
+                'philosophy'         => 'Build real projects, not just tutorials.',
+                'areas_of_expertise' => 'Coding careers, interview prep',
+                'course_duration'    => '8 weeks',
+                'price_raw'          => 28.0,
+            ]],
+            ['kind' => 'mentorship', 'name' => 'Grace Campbell', 'country' => 'Kingston, Jamaica', 'row' => [
+                'title'              => 'Personal finance for beginners (example)',
+                'philosophy'         => 'Spend less than you earn, on purpose.',
+                'areas_of_expertise' => 'Budgeting, saving, first investments',
+                'course_duration'    => '4 weeks',
+                'price_raw'          => 20.0,
+            ]],
+        ];
+    }
+}
+
+if (!function_exists('balo_demo_meta_key')) {
+    function balo_demo_meta_key($kind) {
+        $map = [
+            'skillswitch' => 'skillswitches',
+            'service'     => 'service_listings',
+            'mentorship'  => 'mentorship_listings',
+        ];
+        return $map[$kind] ?? '';
+    }
+}
+
+if (!function_exists('balo_demo_build_row')) {
+    function balo_demo_build_row($kind, $row) {
+        $row['unique_id'] = 'demo_' . $kind . '_' . substr(md5(wp_json_encode($row) . microtime()), 0, 10);
+        $row['is_demo']   = true;                 // flag so demos are easy to spot / remove
+        $row['status']    = 'active';
+        $row['created']   = time();
+        if ($kind === 'service' || $kind === 'mentorship') {
+            $p = isset($row['price_raw']) ? floatval($row['price_raw']) : 0;
+            $row['price_raw'] = $p;
+            $row['price']     = '£' . number_format($p, 2);
+            if ($kind === 'service') {
+                $row['service_price'] = $p;
+            }
+        }
+        return $row;
+    }
+}
+
+add_action('admin_post_balo_seed_demos', 'balo_seed_marketplace_demos');
+function balo_seed_marketplace_demos() {
+    if (!current_user_can('manage_options')) wp_die('Not allowed.');
+    check_admin_referer('balo_seed_demos');
+
+    $added = 0;
+    foreach (balo_demo_personas() as $p) {
+        $slug  = sanitize_title($p['name']);
+        $email = 'demo-' . $slug . '@baloservices.co.uk';
+
+        $user = get_user_by('email', $email);
+        if (!$user) {
+            // wp_insert_user does not email the new user, so no demo mail goes out
+            $uid = wp_insert_user([
+                'user_login'   => 'demo_' . $slug,
+                'user_email'   => $email,
+                'display_name' => $p['name'],
+                'first_name'   => $p['name'],
+                'user_pass'    => wp_generate_password(24, true),
+                'role'         => 'subscriber',
+            ]);
+            if (is_wp_error($uid)) continue;
+            update_user_meta($uid, 'balo_is_demo', 1);
+            update_user_meta($uid, 'balo_demo_country', $p['country']);
+        } else {
+            $uid = $user->ID;
+        }
+
+        $meta_key = balo_demo_meta_key($p['kind']);
+        if (!$meta_key) continue;
+
+        $items = get_user_meta($uid, $meta_key, true);
+        if (!is_array($items)) $items = [];
+
+        // idempotent: don't add a second demo row if one already exists
+        $has_demo = false;
+        foreach ($items as $it) {
+            if (is_array($it) && !empty($it['is_demo'])) { $has_demo = true; break; }
+        }
+        if (!$has_demo) {
+            $items[] = balo_demo_build_row($p['kind'], $p['row']);
+            update_user_meta($uid, $meta_key, $items);
+            $added++;
+        }
+    }
+
+    update_option('balo_demos_seeded', time());
+    wp_safe_redirect(add_query_arg('balo_demos', 'seeded-' . $added, wp_get_referer() ?: admin_url()));
+    exit;
+}
+
+add_action('admin_post_balo_remove_demos', 'balo_remove_marketplace_demos');
+function balo_remove_marketplace_demos() {
+    if (!current_user_can('manage_options')) wp_die('Not allowed.');
+    check_admin_referer('balo_remove_demos');
+
+    require_once ABSPATH . 'wp-admin/includes/user.php';
+    $demo_users = get_users(['meta_key' => 'balo_is_demo', 'meta_value' => 1, 'fields' => 'ID']);
+    foreach ($demo_users as $uid) {
+        wp_delete_user((int) $uid);      // removes the user and their listing meta
+    }
+    delete_option('balo_demos_seeded');
+    wp_safe_redirect(add_query_arg('balo_demos', 'removed', wp_get_referer() ?: admin_url()));
+    exit;
+}
+
+add_action('admin_notices', 'balo_demo_admin_notice');
+function balo_demo_admin_notice() {
+    if (!current_user_can('manage_options')) return;
+
+    $seeded     = get_option('balo_demos_seeded');
+    $seed_url   = wp_nonce_url(admin_url('admin-post.php?action=balo_seed_demos'), 'balo_seed_demos');
+    $remove_url = wp_nonce_url(admin_url('admin-post.php?action=balo_remove_demos'), 'balo_remove_demos');
+
+    echo '<div class="notice notice-info"><p><strong>Balo marketplace demos.</strong> ';
+    if ($seeded) {
+        echo 'Example listings are seeded on the marketplace. ';
+        echo '<a class="button" href="' . esc_url($remove_url) . '">Remove demo listings</a>';
+    } else {
+        echo 'Add clearly-labelled example listings (SkillSwitch, Service, Mentorship) from members around the world, so the marketplace is not empty while people start posting. ';
+        echo '<a class="button button-primary" href="' . esc_url($seed_url) . '">Add demo listings</a>';
+    }
+    echo '</p></div>';
+}
