@@ -2535,7 +2535,7 @@ function balo_delete_my_account_handler() {
     }
 
     wp_send_json_success([
-        'message'  => 'Your account has been deleted. We're sad to see you go 💜',
+        'message'  => 'Your account has been deleted. We\'re sad to see you go 💜',
         'redirect' => home_url('/'),
     ]);
 }
